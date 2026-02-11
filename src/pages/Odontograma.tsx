@@ -421,11 +421,6 @@ export function Odontograma() {
                 </li>
               ))}
             </ul>
-            <div className="mt-4 pt-3 border-t border-slate-200 text-xs text-slate-500">
-              <p>Rojo: Tratamientos existentes</p>
-              <p>Azul: Patología / requerido</p>
-              <p>X: Diente ausente</p>
-            </div>
           </div>
         </div>
       </div>

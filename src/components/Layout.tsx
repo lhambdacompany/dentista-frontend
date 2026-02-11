@@ -24,7 +24,7 @@ export function Layout() {
       <header className="bg-[#5fb3b0] text-white shadow-md">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <Link to="/" className="text-xl font-semibold">
-            Dentissta
+            Dentista
           </Link>
 
           {/* Botón hamburguesa - solo visible en móvil */}

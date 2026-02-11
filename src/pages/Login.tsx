@@ -24,7 +24,7 @@ export function Login() {
     <div className="min-h-screen flex items-center justify-center bg-slate-200 p-4">
       <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8">
         <h1 className="text-2xl font-bold text-[#5fb3b0] mb-6 text-center">
-          Dentissta
+          Dentista
         </h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
