@@ -33,7 +33,7 @@ async function request<T>(
     window.location.href = '/login';
     throw new Error('No autorizado');
   }
-  if (!res.ok) {
+  if (!res.ok) {  
     const text = await res.text();
     try {
       const err = JSON.parse(text) as { message?: string | string[] };
