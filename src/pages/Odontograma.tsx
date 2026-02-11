@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatearFecha } from '../lib/formatDate';
@@ -10,7 +10,39 @@ interface EstadoConfig {
   nombre: string;
   color: string;
   orden: number;
+  simbolo?: string;
 }
+
+// ── SVGs por símbolo ──────────────────────────────────────────────────────────
+
+const SIMBOLO_SVG: Record<string, React.ReactNode> = {
+  X: (
+    <svg viewBox="0 0 32 32" className="absolute inset-0 w-full h-full pointer-events-none" strokeWidth={2.5}>
+      <line x1="4" y1="4" x2="28" y2="28" stroke="#475569" />
+      <line x1="28" y1="4" x2="4" y2="28" stroke="#475569" />
+    </svg>
+  ),
+  ARCO: (
+    <svg viewBox="0 0 32 32" className="absolute inset-0 w-full h-full pointer-events-none" strokeWidth={2.5} fill="none">
+      <path d="M 5 26 L 5 10 L 27 10 L 27 26" stroke="#475569" strokeLinejoin="round" />
+    </svg>
+  ),
+  RECTANGULO: (
+    <svg viewBox="0 0 32 32" className="absolute inset-0 w-full h-full pointer-events-none" strokeWidth={2.5} fill="none">
+      <rect x="5" y="5" width="22" height="22" rx="1" stroke="#475569" />
+    </svg>
+  ),
+  CIRCULO: (
+    <svg viewBox="0 0 32 32" className="absolute inset-0 w-full h-full pointer-events-none" strokeWidth={2.5} fill="none">
+      <circle cx="16" cy="16" r="11" stroke="#475569" />
+    </svg>
+  ),
+  PUNTO: (
+    <svg viewBox="0 0 32 32" className="absolute inset-0 w-full h-full pointer-events-none" fill="#475569">
+      <circle cx="16" cy="16" r="6" />
+    </svg>
+  ),
+};
 
 interface Diente {
   id: string;
@@ -29,9 +61,6 @@ interface OdontogramaData {
 }
 
 // FDI: cuadrantes desde perspectiva del paciente
-// 1x superior der: 18-11 | 2x superior izq: 21-28
-// 3x inferior izq: 31-38 | 4x inferior der: 41-48
-// Temporal: 5x 55-51, 6x 61-65, 7x 71-75, 8x 85-81
 const Q1_PERMANENTE = [18, 17, 16, 15, 14, 13, 12, 11];
 const Q2_PERMANENTE = [21, 22, 23, 24, 25, 26, 27, 28];
 const Q3_PERMANENTE = [31, 32, 33, 34, 35, 36, 37, 38];
@@ -46,108 +75,145 @@ type FilaOdonto = { label: string; izq: number[]; der: number[] };
 function organizarEnCuadrantes(numeros: number[]): FilaOdonto[] {
   const tienePermanente = numeros.some((n) => n >= 11 && n <= 48);
   const tieneTemporal = numeros.some((n) => n >= 51 && n <= 85);
-
   const filas: FilaOdonto[] = [];
 
   if (tienePermanente) {
     filas.push({
-      label: 'Dentición permanente superior',
+      label: 'Permanente superior',
       izq: Q2_PERMANENTE.filter((n) => numeros.includes(n)),
       der: Q1_PERMANENTE.filter((n) => numeros.includes(n)),
     });
   }
-
   if (tieneTemporal) {
-    const temporalSup = {
-      label: 'Dentición temporal (superior)',
-      izq: Q6_TEMPORAL.filter((n) => numeros.includes(n)),
-      der: Q5_TEMPORAL.filter((n) => numeros.includes(n)),
-    };
-    const temporalInf = {
-      label: 'Dentición temporal (inferior)',
-      izq: Q7_TEMPORAL.filter((n) => numeros.includes(n)),
-      der: Q8_TEMPORAL.filter((n) => numeros.includes(n)),
-    };
-    const tieneTemporalSup = temporalSup.izq.length > 0 || temporalSup.der.length > 0;
-    const tieneTemporalInf = temporalInf.izq.length > 0 || temporalInf.der.length > 0;
-    if (tieneTemporalSup) filas.push(temporalSup);
-    if (tieneTemporalInf) filas.push(temporalInf);
+    const ts = { label: 'Temporal superior', izq: Q6_TEMPORAL.filter((n) => numeros.includes(n)), der: Q5_TEMPORAL.filter((n) => numeros.includes(n)) };
+    const ti = { label: 'Temporal inferior', izq: Q7_TEMPORAL.filter((n) => numeros.includes(n)), der: Q8_TEMPORAL.filter((n) => numeros.includes(n)) };
+    if (ts.izq.length || ts.der.length) filas.push(ts);
+    if (ti.izq.length || ti.der.length) filas.push(ti);
   }
-
   if (tienePermanente) {
     filas.push({
-      label: 'Dentición permanente inferior',
+      label: 'Permanente inferior',
       izq: Q3_PERMANENTE.filter((n) => numeros.includes(n)),
       der: Q4_PERMANENTE.filter((n) => numeros.includes(n)),
     });
   }
-
   if (filas.length === 0) {
     return [
-      { label: 'Dentición permanente superior', izq: Q2_PERMANENTE, der: Q1_PERMANENTE },
-      { label: 'Dentición permanente inferior', izq: Q3_PERMANENTE, der: Q4_PERMANENTE },
+      { label: 'Permanente superior', izq: Q2_PERMANENTE, der: Q1_PERMANENTE },
+      { label: 'Permanente inferior', izq: Q3_PERMANENTE, der: Q4_PERMANENTE },
     ];
   }
   return filas;
 }
 
-function DienteSVG({
+// ── Componente diente ─────────────────────────────────────────────────────────
+
+function DienteBtn({
   num,
-  estado,
-  color,
-  isAusente,
+  estadoClave,
+  estados,
+  herramientaActiva,
   tieneNota,
   onClick,
+  onNotaClick,
 }: {
   num: number;
-  estado: string;
-  color: string;
-  isAusente: boolean;
+  estadoClave: string;
+  estados: EstadoConfig[];
+  herramientaActiva: string | null;
   tieneNota: boolean;
   onClick: () => void;
+  onNotaClick: (e: React.MouseEvent) => void;
 }) {
+  const cfg = estados.find((e) => e.clave === estadoClave);
+  const color = cfg?.color ?? '#e2e8f0';
+  const simboloSvg = cfg?.simbolo ? SIMBOLO_SVG[cfg.simbolo] : null;
+
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(e) => e.key === 'Enter' && onClick()}
-      className="flex flex-col items-center relative cursor-pointer select-none group"
-      title={estado}
-    >
-      <div
-        className="w-9 h-9 border border-slate-400 group-hover:ring-2 group-hover:ring-[#5fb3b0] transition flex items-center justify-center shrink-0"
-        style={{ backgroundColor: isAusente ? '#f1f5f9' : color }}
+    <div className="relative group">
+      <button
+        type="button"
+        onClick={onClick}
+        title={`Diente ${num}${cfg ? ` — ${cfg.nombre}` : ''}${herramientaActiva ? '' : ' (seleccioná una herramienta)'}`}
+        className={`relative w-9 h-9 border-2 rounded flex flex-col items-center justify-end pb-0.5 overflow-hidden transition-all
+          ${herramientaActiva ? 'cursor-pointer hover:opacity-80 hover:scale-105' : 'cursor-default'}
+          border-slate-300`}
+        style={{ backgroundColor: color }}
       >
-        {isAusente ? (
-          <span className="text-slate-500 font-bold text-sm">✕</span>
-        ) : (
-          <svg viewBox="0 0 40 40" className="w-full h-full block" preserveAspectRatio="none" style={{ pointerEvents: 'none' }}>
-            <rect width="40" height="40" fill={color} stroke="#94a3b8" strokeWidth="0.5" />
-            <line x1="0" y1="20" x2="40" y2="20" stroke="#94a3b8" strokeWidth="0.3" opacity={0.6} />
-            <line x1="20" y1="0" x2="20" y2="40" stroke="#94a3b8" strokeWidth="0.3" opacity={0.6} />
-            <line x1="0" y1="0" x2="40" y2="40" stroke="#94a3b8" strokeWidth="0.3" opacity={0.6} />
-            <line x1="40" y1="0" x2="0" y2="40" stroke="#94a3b8" strokeWidth="0.3" opacity={0.6} />
-          </svg>
+        {simboloSvg}
+        {tieneNota && (
+          <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-[#5fb3b0] z-10" />
         )}
-      </div>
-      <span className="text-[9px] font-medium text-slate-600 mt-0.5 flex items-center gap-0.5 pointer-events-none">
-        {num}
-        {tieneNota && <span className="text-[#5fb3b0]" title="Tiene nota">●</span>}
-      </span>
+        <span className="text-[9px] font-bold z-10 leading-none select-none text-slate-700">
+          {num}
+        </span>
+      </button>
+      {/* Botón de nota — aparece en hover */}
+      <button
+        type="button"
+        onClick={onNotaClick}
+        title="Agregar / ver nota"
+        className="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-[#5fb3b0] text-white text-[8px] items-center justify-center hidden group-hover:flex z-20 shadow"
+      >
+        ✎
+      </button>
     </div>
   );
 }
+
+function FilaDientes({
+  grupos,
+  dientes,
+  estados,
+  herramienta,
+  onDienteClick,
+  onNotaClick,
+}: {
+  grupos: number[][];
+  dientes: Diente[];
+  estados: EstadoConfig[];
+  herramienta: string | null;
+  onDienteClick: (num: number) => void;
+  onNotaClick: (num: number) => void;
+}) {
+  const getDiente = (num: number) => dientes.find((d) => d.numeroDiente === num);
+  const renderGroup = (nums: number[]) =>
+    nums.map((num) => {
+      const d = getDiente(num);
+      return (
+        <DienteBtn
+          key={num}
+          num={num}
+          estadoClave={d?.estado ?? 'SANO'}
+          estados={estados}
+          herramientaActiva={herramienta}
+          tieneNota={!!d?.observaciones?.trim()}
+          onClick={() => onDienteClick(num)}
+          onNotaClick={(e) => { e.stopPropagation(); onNotaClick(num); }}
+        />
+      );
+    });
+
+  return (
+    <div className="flex items-center justify-center gap-1">
+      {renderGroup(grupos[0])}
+      <div className="w-4 shrink-0" />
+      {renderGroup(grupos[1])}
+    </div>
+  );
+}
+
+// ── Componente principal ──────────────────────────────────────────────────────
 
 export function Odontograma() {
   const { id } = useParams<{ id: string }>();
   const [odontograma, setOdontograma] = useState<OdontogramaData | null>(null);
   const [dientes, setDientes] = useState<Diente[]>([]);
   const [estados, setEstados] = useState<EstadoConfig[]>([]);
-  const [modalDiente, setModalDiente] = useState<Diente | null>(null);
+  const [herramienta, setHerramienta] = useState<string | null>(null); // clave del estado activo, o 'BORRAR'
+  const [modalDiente, setModalDiente] = useState<{ num: number; diente?: Diente } | null>(null);
   const [notaEdit, setNotaEdit] = useState('');
   const [observacionesGen, setObservacionesGen] = useState('');
-  const [editandoObs, setEditandoObs] = useState(false);
   const [editandoCantidad, setEditandoCantidad] = useState(false);
   const [cantidadInput, setCantidadInput] = useState(32);
 
@@ -155,378 +221,397 @@ export function Odontograma() {
     api.estadosDiente.list().then(setEstados).catch(() => setEstados([]));
   }, []);
 
-  const load = () => {
+  const load = useCallback(() => {
     if (!id) return;
     api.odontograma.get(id).then((d) => {
-        const od = d as OdontogramaData & { dientes?: Diente[] };
-        setOdontograma(od);
-        const dientesData = od?.dientes;
-        if (od?.observaciones != null) setObservacionesGen(od.observaciones || '');
-        if (od?.numerosDientes && Array.isArray(od.numerosDientes)) {
-          const n = (od.numerosDientes as number[]).length;
-          setCantidadInput(n >= 52 ? 52 : n >= 32 ? 32 : n >= 16 ? 16 : n >= 8 ? 8 : 32);
-        }
-        if (Array.isArray(dientesData) && dientesData.length > 0) {
-          setDientes(dientesData);
-        } else if (Array.isArray(dientesData) && dientesData.length === 0) {
-          api.odontograma.initDientes(id).then((list) => setDientes(list as Diente[]));
-        } else {
-          api.odontograma.getDientes(id).then((list) => {
-            const arr = list as Diente[];
-            if (arr.length === 0) {
-              api.odontograma.initDientes(id).then((list2) => setDientes(list2 as Diente[]));
-            } else {
-              setDientes(arr);
-            }
-          });
-        }
-      });
-  };
-
-  useEffect(() => {
-    load();
+      const od = d as OdontogramaData & { dientes?: Diente[] };
+      setOdontograma(od);
+      if (od?.observaciones != null) setObservacionesGen(od.observaciones || '');
+      if (od?.numerosDientes && Array.isArray(od.numerosDientes)) {
+        const n = (od.numerosDientes as number[]).length;
+        setCantidadInput(n >= 52 ? 52 : n >= 32 ? 32 : n >= 16 ? 16 : n >= 8 ? 8 : 32);
+      }
+      const dientesData = od?.dientes;
+      if (Array.isArray(dientesData) && dientesData.length > 0) {
+        setDientes(dientesData);
+      } else if (Array.isArray(dientesData) && dientesData.length === 0) {
+        api.odontograma.initDientes(id).then((list) => setDientes(list as Diente[]));
+      } else {
+        api.odontograma.getDientes(id).then((list) => {
+          const arr = list as Diente[];
+          if (arr.length === 0) {
+            api.odontograma.initDientes(id).then((list2) => setDientes(list2 as Diente[]));
+          } else {
+            setDientes(arr);
+          }
+        });
+      }
+    });
   }, [id]);
 
-  const getEstadoColor = (clave: string) => {
-    const e = estados.find((x) => x.clave === clave);
-    return e?.color ?? '#e2e8f0';
+  useEffect(() => { load(); }, [load]);
+
+  // Asegurar que el diente exista en BD antes de operar
+  const asegurarDiente = async (num: number): Promise<Diente> => {
+    const existing = dientes.find((d) => d.numeroDiente === num);
+    if (existing) return existing;
+    try {
+      const nuevo = await api.odontograma.createDiente({ odontogramaId: id!, numeroDiente: num, estado: 'SANO' }) as Diente;
+      setDientes((prev) => [...prev, nuevo]);
+      return nuevo;
+    } catch {
+      // Ya existe en BD pero no en estado local
+      const list = await api.odontograma.getDientes(id!) as Diente[];
+      setDientes(list);
+      const found = list.find((d) => d.numeroDiente === num);
+      if (found) return found;
+      throw new Error('No se pudo obtener el diente');
+    }
   };
 
-  const getEstadoNombre = (clave: string) => {
-    const e = estados.find((x) => x.clave === clave);
-    return e?.nombre ?? clave;
+  const handleDienteClick = useCallback(async (num: number) => {
+    if (!herramienta) return;
+
+    const estadoAnterior = dientes.find((d) => d.numeroDiente === num)?.estado ?? 'SANO';
+
+    if (herramienta === 'BORRAR') {
+      // Revertir a SANO (primer estado configurado o 'SANO')
+      const estadoDefault = estados[0]?.clave ?? 'SANO';
+      setDientes((prev) =>
+        prev.map((d) => d.numeroDiente === num ? { ...d, estado: estadoDefault } : d)
+      );
+      try {
+        const diente = await asegurarDiente(num);
+        await api.odontograma.updateDiente(diente.id, { estado: estadoDefault });
+      } catch {
+        setDientes((prev) => prev.map((d) => d.numeroDiente === num ? { ...d, estado: estadoAnterior } : d));
+      }
+      return;
+    }
+
+    // Toggle: si ya tiene ese estado, volver al primero
+    const nuevoEstado = estadoAnterior === herramienta
+      ? (estados[0]?.clave ?? 'SANO')
+      : herramienta;
+
+    // Optimistic update
+    setDientes((prev) =>
+      prev.map((d) => d.numeroDiente === num ? { ...d, estado: nuevoEstado } : d)
+    );
+
+    try {
+      const diente = await asegurarDiente(num);
+      await api.odontograma.updateDiente(diente.id, { estado: nuevoEstado });
+    } catch {
+      // Revertir
+      setDientes((prev) => prev.map((d) => d.numeroDiente === num ? { ...d, estado: estadoAnterior } : d));
+    }
+  }, [herramienta, dientes, estados, id]);
+
+  const handleNotaClick = (num: number) => {
+    const diente = dientes.find((d) => d.numeroDiente === num);
+    setModalDiente({ num, diente });
+    setNotaEdit(diente?.observaciones ?? '');
   };
 
-  const getDiente = (num: number) => dientes.find((d) => d.numeroDiente === num);
+  const handleGuardarNota = async () => {
+    if (!modalDiente) return;
+    try {
+      const diente = await asegurarDiente(modalDiente.num);
+      await api.odontograma.updateDiente(diente.id, { observaciones: notaEdit });
+      setDientes((prev) =>
+        prev.map((d) => d.numeroDiente === modalDiente.num ? { ...d, observaciones: notaEdit } : d)
+      );
+      setModalDiente(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al guardar nota');
+    }
+  };
 
   const filas =
     odontograma?.numerosDientes && Array.isArray(odontograma.numerosDientes) && odontograma.numerosDientes.length > 0
       ? organizarEnCuadrantes(odontograma.numerosDientes as number[])
       : [
-          { label: 'Dentición permanente superior', izq: Q2_PERMANENTE, der: Q1_PERMANENTE },
-          { label: 'Dentición permanente inferior', izq: Q3_PERMANENTE, der: Q4_PERMANENTE },
+          { label: 'Permanente superior', izq: Q2_PERMANENTE, der: Q1_PERMANENTE },
+          { label: 'Permanente inferior', izq: Q3_PERMANENTE, der: Q4_PERMANENTE },
         ];
 
-  const handleClick = (diente: Diente) => {
-    setModalDiente(diente);
-    setNotaEdit(diente.observaciones ?? '');
-  };
-
-  const handleCerrarModal = () => {
-    setModalDiente(null);
-    setNotaEdit('');
-  };
-
-  const handleCambiarEstado = (nuevoEstado: string) => {
-    if (!modalDiente) return;
-    api.odontograma.updateDiente(modalDiente.id, { estado: nuevoEstado }).then(() => {
-      setDientes((prev) =>
-        prev.map((d) => (d.id === modalDiente.id ? { ...d, estado: nuevoEstado } : d))
-      );
-      setModalDiente((m) => (m ? { ...m, estado: nuevoEstado } : null));
-    });
-  };
-
-  const handleGuardarNota = () => {
-    if (!modalDiente) return;
-    api.odontograma.updateDiente(modalDiente.id, { observaciones: notaEdit }).then(() => {
-      setDientes((prev) =>
-        prev.map((d) => (d.id === modalDiente.id ? { ...d, observaciones: notaEdit } : d))
-      );
-      setModalDiente((m) => (m ? { ...m, observaciones: notaEdit } : null));
-    });
-  };
-
-  const handleClickDienteOcrear = (num: number) => {
-    const d = getDiente(num);
-    if (d) {
-      handleClick(d);
-    } else if (id) {
-      api.odontograma
-        .createDiente({ odontogramaId: id, numeroDiente: num, estado: 'SANO' })
-        .then((nuevo) => {
-          const diente = nuevo as Diente;
-          setDientes((prev) => [...prev, diente]);
-          setModalDiente(diente);
-          setNotaEdit(diente.observaciones || '');
-        })
-        .catch(() => {
-          // El diente ya existe en BD (unique constraint) pero no en estado: refrescar y abrir
-          api.odontograma.getDientes(id!).then((list) => {
-            const arr = list as Diente[];
-            setDientes(arr);
-            const existente = arr.find((x) => x.numeroDiente === num);
-            if (existente) {
-              setModalDiente(existente);
-              setNotaEdit(existente.observaciones || '');
-            }
-          });
-        });
-    }
-  };
-
-  const renderFila = (nums: number[]) => (
-    <div className="flex gap-0.5 justify-center flex-wrap">
-      {nums.map((num) => {
-        const d = getDiente(num);
-        if (!d)
-          return (
-            <DienteSVG
-              key={num}
-              num={num}
-              estado="Sano"
-              color="#e2e8f0"
-              isAusente={false}
-              tieneNota={false}
-              onClick={() => handleClickDienteOcrear(num)}
-            />
-          );
-        const color = getEstadoColor(d.estado);
-        const isAusente = d.estado === 'AUSENTE';
-        return (
-          <DienteSVG
-            key={num}
-            num={num}
-            estado={getEstadoNombre(d.estado)}
-            color={color}
-            isAusente={isAusente}
-            tieneNota={!!d.observaciones?.trim()}
-            onClick={() => handleClick(d)}
-          />
-        );
-      })}
-    </div>
-  );
-
-  if (!odontograma) return <div className="text-center py-12">Cargando...</div>;
+  if (!odontograma) return <div className="text-center py-12 text-slate-500">Cargando...</div>;
 
   const pacienteId = odontograma.paciente?.id;
+  const fechaOdonto = new Date(odontograma.fecha);
+  const mes = fechaOdonto.toLocaleString('es-AR', { month: 'long' }).toUpperCase();
+  const anio = fechaOdonto.getFullYear();
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <Link
-          to={pacienteId ? `/pacientes/${pacienteId}` : '/pacientes'}
-          className="inline-flex items-center text-[#5fb3b0] hover:underline"
-        >
-          ← Odontograma de: {odontograma.paciente?.nombre} {odontograma.paciente?.apellido}
-        </Link>
-        <span className="text-sm text-slate-500">
-          {odontograma.titulo || formatearFecha(odontograma.fecha)}
-        </span>
-      </div>
+      <Link
+        to={pacienteId ? `/pacientes/${pacienteId}` : '/pacientes'}
+        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+        Volver al paciente
+      </Link>
 
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Odontograma principal */}
-        <div className="flex-1 bg-white rounded-xl shadow p-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <h2 className="text-lg font-semibold text-slate-800">Odontograma</h2>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-600">Cantidad de dientes:</span>
-              {editandoCantidad ? (
-                <div className="flex items-center gap-2">
-                  <select
-                    value={cantidadInput}
-                    onChange={(e) => setCantidadInput(Number(e.target.value))}
-                    className="px-2 py-1 border border-slate-300 rounded text-sm"
-                  >
-                    <option value={8}>8</option>
-                    <option value={16}>16</option>
-                    <option value={32}>32</option>
-                    <option value={52}>52</option>
-                  </select>
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+
+        {/* ── ENCABEZADO ── */}
+        <div className="border-b-2 border-[#5fb3b0] p-5 flex flex-col sm:flex-row items-stretch gap-4">
+          <div className="flex items-center gap-4 shrink-0">
+            <div className="w-16 h-16 rounded-full border-2 border-[#5fb3b0] flex items-center justify-center text-3xl select-none">
+              🦷
+            </div>
+            <div className="border-2 border-[#5fb3b0] px-4 py-2 text-center">
+              <p className="text-xs font-bold text-slate-700 leading-tight">ODONTOGRAMA</p>
+            </div>
+          </div>
+          <div className="flex-1 border-2 border-[#5fb3b0] p-3 flex items-center text-sm">
+            <div>
+              <p className="font-bold text-slate-700">
+                {odontograma.paciente?.nombre} {odontograma.paciente?.apellido}
+              </p>
+              <p className="text-slate-500 text-xs mt-0.5">
+                {odontograma.titulo || formatearFecha(odontograma.fecha)}
+              </p>
+            </div>
+          </div>
+          <div className="border-2 border-[#5fb3b0] p-3 text-sm text-center flex flex-col justify-center shrink-0">
+            <p className="font-bold text-slate-700 uppercase">{mes}</p>
+            <p className="text-slate-600">{anio}</p>
+          </div>
+        </div>
+
+        <div className="p-5 space-y-5">
+
+          {/* ── PALETA DE HERRAMIENTAS ── */}
+          <section className="border border-slate-200 rounded-lg overflow-hidden">
+            <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Herramienta activa</p>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {estados.map((e) => (
                   <button
+                    key={e.clave}
                     type="button"
-                    onClick={async () => {
-                      const nums = numerosDesdeCantidad(cantidadInput);
-                      await api.odontograma.update(id!, { numerosDientes: nums });
-                      setOdontograma((o) => (o ? { ...o, numerosDientes: nums } : null));
-                      setEditandoCantidad(false);
-                      load();
-                    }}
-                    className="px-2 py-1 bg-[#5fb3b0] text-white rounded text-sm"
+                    onClick={() => setHerramienta((prev) => prev === e.clave ? null : e.clave)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all
+                      ${herramienta === e.clave
+                        ? 'bg-[#5fb3b0] border-[#4a9a97] text-white shadow-sm'
+                        : 'bg-white border-slate-300 text-slate-600 hover:border-[#5fb3b0] hover:text-[#5fb3b0]'
+                      }`}
                   >
-                    Aplicar
+                    <span
+                      className="relative w-4 h-4 rounded-sm border border-slate-300 shrink-0 overflow-hidden"
+                      style={{ backgroundColor: e.color }}
+                    >
+                      {e.simbolo && SIMBOLO_SVG[e.simbolo]}
+                    </span>
+                    {e.nombre}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditandoCantidad(false)}
-                    className="px-2 py-1 bg-slate-200 rounded text-sm"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              ) : (
+                ))}
+                {/* Borrar */}
                 <button
                   type="button"
-                  onClick={() => setEditandoCantidad(true)}
-                  className="text-sm text-[#5fb3b0] hover:underline"
+                  onClick={() => setHerramienta((prev) => prev === 'BORRAR' ? null : 'BORRAR')}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all
+                    ${herramienta === 'BORRAR'
+                      ? 'bg-[#5fb3b0] border-[#4a9a97] text-white shadow-sm'
+                      : 'bg-white border-slate-300 text-slate-600 hover:border-[#5fb3b0] hover:text-[#5fb3b0]'
+                    }`}
                 >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Borrar
+                </button>
+              </div>
+              {herramienta ? (
+                <p className="text-xs text-[#5fb3b0] font-medium">
+                  Herramienta activa: <strong>
+                    {herramienta === 'BORRAR' ? 'Borrar' : estados.find((e) => e.clave === herramienta)?.nombre}
+                  </strong> — hacé clic en un diente para marcarlo. Clic nuevamente para desmarcarlo.
+                </p>
+              ) : (
+                <p className="text-xs text-slate-400">Seleccioná una herramienta para editar el odontograma. Pasá el cursor sobre un diente para agregar una nota.</p>
+              )}
+            </div>
+          </section>
+
+          {/* ── ODONTOGRAMA ── */}
+          <section className="border border-slate-200 rounded-lg overflow-hidden">
+            <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Odontograma</p>
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <span>
                   {odontograma?.numerosDientes && Array.isArray(odontograma.numerosDientes)
                     ? (odontograma.numerosDientes as number[]).length
                     : 32}{' '}
-                  dientes · Editar
-                </button>
-              )}
+                  dientes
+                </span>
+                {!editandoCantidad ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditandoCantidad(true)}
+                    className="text-[#5fb3b0] hover:underline"
+                  >
+                    · Editar
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <select
+                      value={cantidadInput}
+                      onChange={(e) => setCantidadInput(Number(e.target.value))}
+                      className="px-1 py-0.5 border border-slate-300 rounded text-xs"
+                    >
+                      <option value={8}>8</option>
+                      <option value={16}>16</option>
+                      <option value={32}>32</option>
+                      <option value={52}>52</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const nums = numerosDesdeCantidad(cantidadInput);
+                        await api.odontograma.update(id!, { numerosDientes: nums });
+                        setOdontograma((o) => (o ? { ...o, numerosDientes: nums } : null));
+                        setEditandoCantidad(false);
+                        load();
+                      }}
+                      className="px-2 py-0.5 bg-[#5fb3b0] text-white rounded text-xs"
+                    >
+                      Aplicar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditandoCantidad(false)}
+                      className="px-2 py-0.5 bg-slate-200 rounded text-xs"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-
-          <div className="flex items-start gap-4">
-            <span className="text-xs font-medium text-slate-500 w-12 text-center shrink-0 pt-8">IZQ.</span>
-            <div className="flex-1 min-w-0 relative z-20 isolate" style={{ pointerEvents: 'auto' }}>
+            <div className="p-4 space-y-2 overflow-x-auto pb-4">
               {filas.map((fila, idx) => (
-                <div key={idx} className="mb-4">
-                  {fila.label && (
-                    <div className="text-center text-xs text-slate-500 font-medium mb-2">
-                      {fila.label}
+                <div key={idx} className="space-y-1">
+                  <p className="text-center text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                    {fila.label}
+                  </p>
+                  <FilaDientes
+                    grupos={[fila.der, fila.izq]}
+                    dientes={dientes}
+                    estados={estados}
+                    herramienta={herramienta}
+                    onDienteClick={handleDienteClick}
+                    onNotaClick={handleNotaClick}
+                  />
+                  {idx === 0 && (
+                    <div className="flex justify-between px-10 py-0.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                      <span>Derecha</span>
+                      <span>Izquierda</span>
                     </div>
                   )}
-                  <div className="flex gap-6 justify-center items-start">
-                    <div className="flex flex-col items-center">
-                      <span className="text-[10px] text-slate-400 mb-1">Izq</span>
-                      {renderFila(fila.izq)}
-                    </div>
-                    <div className="flex flex-col items-center">
-                      <span className="text-[10px] text-slate-400 mb-1">Der</span>
-                      {renderFila(fila.der)}
-                    </div>
-                  </div>
                 </div>
               ))}
             </div>
-            <span className="text-xs font-medium text-slate-500 w-12 text-center shrink-0 pt-8">DER.</span>
-          </div>
+          </section>
 
-          {dientes.length === 0 && (
-            <p className="text-center mt-4 text-slate-500 text-sm">Inicializando odontograma...</p>
-          )}
-
-          <p className="text-xs text-slate-400 mt-4 text-center">
-            Clic en cada diente para cambiar estado o agregar nota
-          </p>
-        </div>
-
-        {/* Panel Referencias - sin sticky en móvil para no tapar dientes inferiores */}
-        <div className="w-full lg:w-64 shrink-0">
-          <div className="bg-white rounded-xl shadow p-4 lg:sticky lg:top-4">
-            <h3 className="text-sm font-semibold text-slate-800 mb-3">Referencias</h3>
-            <ul className="space-y-2 text-sm">
+          {/* ── REFERENCIAS ── */}
+          <section className="border border-slate-200 rounded-lg overflow-hidden">
+            <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Referencias</p>
+            </div>
+            <div className="p-4 flex flex-wrap gap-x-6 gap-y-2">
               {estados.map((e) => (
-                <li key={e.id} className="flex items-center gap-2">
+                <div key={e.id} className="flex items-center gap-2">
                   <span
-                    className="w-5 h-5 rounded border border-slate-300 shrink-0"
+                    className="relative w-5 h-5 rounded-sm border border-slate-300 shrink-0 overflow-hidden"
                     style={{ backgroundColor: e.color }}
-                  />
-                  <span className="text-slate-700">{e.nombre}</span>
-                </li>
+                  >
+                    {e.simbolo && SIMBOLO_SVG[e.simbolo]}
+                  </span>
+                  <span className="text-xs text-slate-600">{e.nombre}</span>
+                </div>
               ))}
-            </ul>
-          </div>
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#5fb3b0] shrink-0" />
+                <span className="text-xs text-slate-600">Tiene nota</span>
+              </div>
+            </div>
+          </section>
+
+          {/* ── OBSERVACIONES GENERALES ── */}
+          <section className="border border-slate-200 rounded-lg overflow-hidden">
+            <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Observaciones generales</p>
+            </div>
+            <div className="p-4">
+              <textarea
+                value={observacionesGen}
+                onChange={(e) => setObservacionesGen(e.target.value)}
+                onBlur={() => {
+                  api.odontograma.update(id!, { observaciones: observacionesGen }).catch(console.error);
+                }}
+                placeholder="Observaciones generales del odontograma..."
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#5fb3b0]/50"
+              />
+            </div>
+          </section>
+
         </div>
       </div>
 
-      {/* Observaciones generales - en tarjeta separada para no interferir con clics del odontograma */}
-      <div className="bg-white rounded-xl shadow p-6">
-        <h3 className="text-sm font-semibold text-slate-800 mb-2">Observaciones</h3>
-        {editandoObs ? (
-          <div>
-            <textarea
-              value={observacionesGen}
-              onChange={(e) => setObservacionesGen(e.target.value)}
-              placeholder="Ej: Hacer limpieza en el próximo control..."
-              rows={3}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none focus:ring-2 focus:ring-[#5fb3b0] focus:border-transparent"
-            />
-            <div className="mt-2 flex gap-2">
+      {/* ── MODAL NOTA POR DIENTE ── */}
+      {modalDiente && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          onClick={() => setModalDiente(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-slate-800">
+                Nota — Diente {modalDiente.num}
+              </h3>
               <button
                 type="button"
-                onClick={() => {
-                  api.odontograma.update(id!, { observaciones: observacionesGen }).then(() => {
-                    setEditandoObs(false);
-                    setOdontograma((o) => (o ? { ...o, observaciones: observacionesGen } : null));
-                  });
-                }}
-                className="px-3 py-1.5 bg-[#5fb3b0] text-white rounded-lg text-sm hover:bg-[#4fa39f]"
+                onClick={() => setModalDiente(null)}
+                className="text-slate-400 hover:text-slate-600"
               >
-                Guardar
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
+            </div>
+            <textarea
+              value={notaEdit}
+              onChange={(e) => setNotaEdit(e.target.value)}
+              placeholder="Observaciones para este diente..."
+              rows={4}
+              autoFocus
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#5fb3b0]/50"
+            />
+            <div className="flex gap-2 justify-end">
               <button
                 type="button"
-                onClick={() => { setObservacionesGen(odontograma?.observaciones ?? ''); setEditandoObs(false); }}
-                className="px-3 py-1.5 bg-slate-200 rounded-lg text-sm hover:bg-slate-300"
+                onClick={() => setModalDiente(null)}
+                className="px-4 py-2 bg-slate-100 rounded-lg text-sm hover:bg-slate-200"
               >
                 Cancelar
               </button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-slate-600 text-sm whitespace-pre-wrap flex-1 min-w-0">
-              {observacionesGen || 'Sin observaciones'}
-            </p>
-            <button
-              type="button"
-              onClick={() => setEditandoObs(true)}
-              className="text-[#5fb3b0] hover:underline text-sm shrink-0"
-            >
-              Editar
-            </button>
-          </div>
-        )}
-      </div>
-
-      {modalDiente && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={handleCerrarModal}
-        >
-          <div
-            className="bg-white rounded-xl shadow-lg max-w-md w-full p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">
-              Diente {modalDiente.numeroDiente}
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-600 mb-2">Estado</label>
-                <div className="flex flex-wrap gap-2">
-                  {estados.map((e) => (
-                    <button
-                      key={e.id}
-                      type="button"
-                      onClick={() => handleCambiarEstado(e.clave)}
-                      className={`px-3 py-1.5 rounded text-sm transition ${
-                        modalDiente.estado === e.clave
-                          ? 'ring-2 ring-[#5fb3b0] ring-offset-1'
-                          : 'hover:opacity-90'
-                      }`}
-                      style={{ backgroundColor: e.color }}
-                    >
-                      {e.nombre}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-600 mb-2">Nota / Observaciones</label>
-                <textarea
-                  value={notaEdit}
-                  onChange={(e) => setNotaEdit(e.target.value)}
-                  onBlur={handleGuardarNota}
-                  placeholder="Observaciones para este diente..."
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none focus:ring-2 focus:ring-[#5fb3b0] focus:border-transparent"
-                />
-              </div>
-            </div>
-            <div className="mt-6 flex justify-end">
               <button
                 type="button"
-                onClick={handleCerrarModal}
-                className="px-4 py-2 bg-slate-200 rounded-lg hover:bg-slate-300"
+                onClick={handleGuardarNota}
+                className="px-4 py-2 bg-[#5fb3b0] text-white rounded-lg text-sm hover:bg-[#4a9a97] font-medium"
               >
-                Cerrar
+                Guardar nota
               </button>
             </div>
           </div>
