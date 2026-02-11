@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatearFecha } from '../lib/formatDate';
@@ -60,6 +60,8 @@ interface RegistroPrestacion {
   coronas: boolean;
   consentimientoInformado: boolean;
   estadosDientes?: Record<string, EstadoDiente>;
+  firmaProfesional?: string;
+  firmaPaciente?: string;
   items: PrestacionItem[];
 }
 
@@ -275,6 +277,119 @@ function Odontograma({
   );
 }
 
+// ── Pad de firma ─────────────────────────────────────────────────────────────
+
+interface SignaturePadProps {
+  label: string;
+  initialValue?: string;
+  onChange: (dataUrl: string | null) => void;
+}
+
+function SignaturePad({ label, initialValue, onChange }: SignaturePadProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const lastPos = useRef<{ x: number; y: number } | null>(null);
+
+  // Draw initial signature when component mounts or initialValue changes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (initialValue) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0);
+      img.src = initialValue;
+    }
+  }, [initialValue]);
+
+  const getPos = (e: React.MouseEvent | React.TouchEvent): { x: number; y: number } | null => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    if ('touches' in e) {
+      const t = e.touches[0];
+      return { x: (t.clientX - rect.left) * scaleX, y: (t.clientY - rect.top) * scaleY };
+    }
+    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+  };
+
+  const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    drawing.current = true;
+    lastPos.current = getPos(e);
+  };
+
+  const draw = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    if (!drawing.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const pos = getPos(e);
+    if (!pos || !lastPos.current) return;
+    ctx.beginPath();
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.moveTo(lastPos.current.x, lastPos.current.y);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    lastPos.current = pos;
+  };
+
+  const endDraw = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    if (!drawing.current) return;
+    drawing.current = false;
+    lastPos.current = null;
+    const canvas = canvasRef.current;
+    if (canvas) onChange(canvas.toDataURL('image/png'));
+  };
+
+  const limpiar = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    onChange(null);
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <canvas
+        ref={canvasRef}
+        width={300}
+        height={120}
+        className="border border-slate-300 rounded-lg w-full touch-none bg-white cursor-crosshair"
+        style={{ maxWidth: 300 }}
+        onMouseDown={startDraw}
+        onMouseMove={draw}
+        onMouseUp={endDraw}
+        onMouseLeave={endDraw}
+        onTouchStart={startDraw}
+        onTouchMove={draw}
+        onTouchEnd={endDraw}
+      />
+      <button
+        type="button"
+        onClick={limpiar}
+        className="text-xs text-slate-400 hover:text-red-500 underline"
+      >
+        Limpiar firma
+      </button>
+      <div className="border-t border-slate-400 w-full pt-1 text-xs text-slate-500 uppercase tracking-wide text-center">
+        {label}
+      </div>
+    </div>
+  );
+}
+
 // ── Componente principal ─────────────────────────────────────────────────────
 
 const TEXTO_CONSENTIMIENTO = `Por la presente reconozco que el/la profesional me ha informado del tipo de tratamiento que debe efectuarse en base al diagnóstico realizado. A su pedido he manifestado todo lo que conozco respecto a mi salud. Se me ha explicado en términos comprensibles para mí y reconozco haber entendido acabadamente la tarea propuesta. De la misma manera se me ha informado de los riesgos y complicaciones que pudieran surgir y, ante la posibilidad de que aparezcan consecuencias no previsibles, dada la capacidad que le reconozco al/la profesional antes mencionado/a, los aceptaré como inherentes a la tarea realizada. También doy mi expresa conformidad; el uso correcto de la aparatología y el cumplimiento de las indicaciones del profesional hacen al éxito del tratamiento y son de mi exclusiva responsabilidad. Además autorizo al/la profesional antes citado/a a proveer los servicios o tratamientos adicionales que considere razonables, incluyendo, aunque no limitados a ello, la administración de anestesia local, prácticas radiológicas y otros métodos de diagnóstico necesarios. También se me han descrito todas las variantes y sus correspondientes posibilidades y riesgos y en ejercicio de mi libertad, considerándome suficientemente informado/a, opto por el tratamiento propuesto que se me ha detallado en esta ficha (codificada) firmando de conformidad este consentimiento.`;
@@ -296,14 +411,21 @@ export function RegistroPrestaciones() {
   });
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [herramienta, setHerramienta] = useState<Herramienta | null>(null);
+  const [firmaProf, setFirmaProf] = useState<string | null>(null);
+  const [firmaPac, setFirmaPac] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const [guardadoOk, setGuardadoOk] = useState(false);
 
   const load = () => {
     if (!citaId) return;
     api.prestaciones
       .getByCita(citaId)
       .then((r) => {
+        const reg = (r as { registro: RegistroPrestacion | null }).registro;
         setCita((r as { cita: Cita }).cita);
-        setRegistro((r as { registro: RegistroPrestacion | null }).registro);
+        setRegistro(reg);
+        if (reg?.firmaProfesional) setFirmaProf(reg.firmaProfesional);
+        if (reg?.firmaPaciente) setFirmaPac(reg.firmaPaciente);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -328,6 +450,23 @@ export function RegistroPrestaciones() {
       setRegistro((prev) => prev ? { ...prev, ...r } : r);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error');
+    }
+  };
+
+  const handleGuardarFirmas = async () => {
+    if (!registro) return;
+    setGuardando(true);
+    try {
+      await api.prestaciones.updateRegistro(registro.id, {
+        firmaProfesional: firmaProf ?? undefined,
+        firmaPaciente: firmaPac ?? undefined,
+      } as never);
+      setGuardadoOk(true);
+      setTimeout(() => setGuardadoOk(false), 3000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al guardar firmas');
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -799,20 +938,46 @@ export function RegistroPrestaciones() {
               </section>
 
               {/* ── FIRMAS ── */}
-              <div className="grid grid-cols-2 gap-8 pt-6 mt-2">
-                <div className="text-center">
-                  <div className="h-16" />
-                  <div className="border-t border-slate-400 pt-2 text-xs text-slate-500 uppercase tracking-wide">
-                    Sello y firma del profesional
+              <section className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Firmas</p>
+                </div>
+                <div className="p-4 space-y-4">
+                  <p className="text-xs text-slate-500">Firmar con el mouse o con el dedo en pantalla táctil. Presionar "Guardar" para conservar las firmas.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                    <SignaturePad
+                      label="Sello y firma del profesional"
+                      initialValue={firmaProf ?? undefined}
+                      onChange={setFirmaProf}
+                    />
+                    <SignaturePad
+                      label="Firma del paciente"
+                      initialValue={firmaPac ?? undefined}
+                      onChange={setFirmaPac}
+                    />
+                  </div>
+
+                  {/* Botón Guardar */}
+                  <div className="flex items-center gap-4 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleGuardarFirmas}
+                      disabled={guardando}
+                      className="px-6 py-2.5 bg-[#5fb3b0] text-white rounded-lg hover:bg-[#4a9a97] font-medium text-sm disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {guardando ? 'Guardando...' : 'Guardar'}
+                    </button>
+                    {guardadoOk && (
+                      <span className="flex items-center gap-1.5 text-sm text-green-600 font-medium">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Firmas guardadas correctamente
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="text-center">
-                  <div className="h-16" />
-                  <div className="border-t border-slate-400 pt-2 text-xs text-slate-500 uppercase tracking-wide">
-                    Firma del paciente
-                  </div>
-                </div>
-              </div>
+              </section>
             </>
           )}
         </div>
