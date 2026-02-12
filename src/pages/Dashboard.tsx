@@ -37,38 +37,7 @@ function CitaWhatsAppButton({ paciente }: { paciente: { nombre: string; telefono
   );
 }
 
-function CitaRecordatorioButton({ citaId }: { citaId: string }) {
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState('');
-  const handleClick = async () => {
-    setLoading(true);
-    setMsg('');
-    try {
-      const res = await api.citas.enviarRecordatorio(citaId) as { enviado: boolean; mensaje: string };
-      setMsg(res.enviado ? '✓ Enviado' : res.mensaje);
-      if (!res.enviado) setTimeout(() => setMsg(''), 4000);
-    } catch {
-      setMsg('Error');
-      setTimeout(() => setMsg(''), 3000);
-    } finally {
-      setLoading(false);
-    }
-  };
-  return (
-    <div className="flex items-center gap-1">
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={loading}
-        className="text-xs px-2 py-1 bg-slate-200 hover:bg-slate-300 rounded disabled:opacity-50"
-        title="Enviar recordatorio por email"
-      >
-        {loading ? '...' : '✉ Recordatorio'}
-      </button>
-      {msg && <span className="text-xs text-slate-600">{msg}</span>}
-    </div>
-  );
-}
+
 
 interface Cita {
   id: string;
@@ -259,7 +228,6 @@ export function Dashboard() {
                     >
                       {c.estado}
                     </span>
-                    {/* <CitaRecordatorioButton citaId={c.id} /> */}
                     <CitaWhatsAppButton paciente={c.paciente} />
                   </div>
                 </li>
