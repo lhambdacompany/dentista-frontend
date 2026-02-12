@@ -15,6 +15,28 @@ import {
 } from 'recharts';
 import { api } from '../lib/api';
 
+function CitaWhatsAppButton({ paciente }: { paciente: { nombre: string; telefono?: string } }) {
+  if (!paciente.telefono) return null;
+
+  const telefono = paciente.telefono.replace(/\D/g, '');
+  const mensaje = encodeURIComponent(
+    `Hola ${paciente.nombre}, te recordamos que tenés un turno programado. ¡Te esperamos!`
+  );
+  const url = `https://wa.me/${telefono}?text=${mensaje}`;
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-xs px-2 py-1 bg-green-100 hover:bg-green-200 text-green-800 rounded inline-flex items-center gap-1"
+      title="Enviar recordatorio por WhatsApp"
+    >
+      📱 WhatsApp
+    </a>
+  );
+}
+
 function CitaRecordatorioButton({ citaId }: { citaId: string }) {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
@@ -54,7 +76,7 @@ interface Cita {
   horaFin: string;
   motivo?: string;
   estado: string;
-  paciente: { id: string; nombre: string; apellido: string };
+  paciente: { id: string; nombre: string; apellido: string; telefono?: string };
 }
 
 interface Paciente {
@@ -238,6 +260,7 @@ export function Dashboard() {
                       {c.estado}
                     </span>
                     <CitaRecordatorioButton citaId={c.id} />
+                    <CitaWhatsAppButton paciente={c.paciente} />
                   </div>
                 </li>
               ))}
