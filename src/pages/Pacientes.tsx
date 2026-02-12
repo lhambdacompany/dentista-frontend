@@ -7,9 +7,14 @@ interface Paciente {
   nombre: string;
   apellido: string;
   dni: string;
+  fechaNacimiento?: string;
   telefono?: string;
   email?: string;
-  obraSocial?: { nombre: string };
+  direccion?: string;
+  nota?: string;
+  alergias?: string;
+  obraSocial?: { id: string; nombre: string };
+  obraSocialId?: string;
   _count?: { citas: number; odontogramas: number };
 }
 
@@ -18,6 +23,9 @@ export function Pacientes() {
   const [obras, setObras] = useState<{ id: string; nombre: string }[]>([]);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [editandoPaciente, setEditandoPaciente] = useState<Paciente | null>(null);
+  const [editForm, setEditForm] = useState<Partial<Paciente>>({});
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
   const [form, setForm] = useState({
     nombre: '',
     apellido: '',
@@ -38,6 +46,41 @@ export function Pacientes() {
   useEffect(() => {
     api.obrasSociales.list().then((d) => setObras((d as { id: string; nombre: string }[]) || []));
   }, []);
+
+  const abrirEdicion = async (p: Paciente) => {
+    // Cargar datos completos del paciente para tener todos los campos
+    const completo = await api.pacientes.get(p.id) as Paciente;
+    setEditForm({
+      nombre: completo.nombre,
+      apellido: completo.apellido,
+      dni: completo.dni,
+      fechaNacimiento: completo.fechaNacimiento?.slice(0, 10) ?? '',
+      telefono: completo.telefono ?? '',
+      email: completo.email ?? '',
+      direccion: completo.direccion ?? '',
+      nota: completo.nota ?? '',
+      alergias: completo.alergias ?? '',
+      obraSocialId: completo.obraSocial?.id ?? '',
+    });
+    setEditandoPaciente(completo);
+  };
+
+  const handleGuardarEdicion = async () => {
+    if (!editandoPaciente) return;
+    setGuardandoEdicion(true);
+    try {
+      const actualizado = await api.pacientes.update(editandoPaciente.id, {
+        ...editForm,
+        obraSocialId: editForm.obraSocialId || null,
+      }) as Paciente;
+      setPacientes((prev) => prev.map((p) => p.id === actualizado.id ? { ...p, ...actualizado } : p));
+      setEditandoPaciente(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setGuardandoEdicion(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -242,12 +285,21 @@ export function Pacientes() {
                   </td>
                   <td className="px-4 py-3 text-slate-600">{p._count?.citas ?? 0}</td>
                   <td className="px-4 py-3">
-                    <Link
-                      to={`/pacientes/${p.id}`}
-                      className="text-sm text-[#5fb3b0] hover:underline"
-                    >
-                      Ver ficha
-                    </Link>
+                    <div className="flex items-center gap-3">
+                      <Link
+                        to={`/pacientes/${p.id}`}
+                        className="text-sm text-[#5fb3b0] hover:underline"
+                      >
+                        Ver ficha
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => abrirEdicion(p)}
+                        className="text-sm text-slate-500 hover:text-slate-700 hover:underline"
+                      >
+                        Editar
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -260,6 +312,107 @@ export function Pacientes() {
           </p>
         )}
       </div>
+
+      {/* ── MODAL EDITAR PACIENTE ── */}
+      {editandoPaciente && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          onClick={() => setEditandoPaciente(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <h2 className="text-lg font-semibold text-slate-800">
+                Editar — {editandoPaciente.nombre} {editandoPaciente.apellido}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setEditandoPaciente(null)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Nombre</label>
+                  <input type="text" value={editForm.nombre ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, nombre: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5fb3b0]/50" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Apellido</label>
+                  <input type="text" value={editForm.apellido ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, apellido: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5fb3b0]/50" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">DNI</label>
+                  <input type="text" value={editForm.dni ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, dni: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5fb3b0]/50" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Fecha de nacimiento</label>
+                  <input type="date" value={editForm.fechaNacimiento ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, fechaNacimiento: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5fb3b0]/50" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Teléfono</label>
+                  <input type="tel" value={editForm.telefono ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, telefono: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5fb3b0]/50" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Email</label>
+                  <input type="email" value={editForm.email ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5fb3b0]/50" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Domicilio</label>
+                  <input type="text" value={editForm.direccion ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, direccion: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5fb3b0]/50" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Obra social</label>
+                  <select value={editForm.obraSocialId ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, obraSocialId: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5fb3b0]/50">
+                    <option value="">Sin obra social</option>
+                    {obras.map((o) => (
+                      <option key={o.id} value={o.id}>{o.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Alergias</label>
+                  <input type="text" value={editForm.alergias ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, alergias: e.target.value }))}
+                    placeholder="Dejar vacío si no hay alergias conocidas"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#5fb3b0]/50" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Nota interna</label>
+                  <textarea value={editForm.nota ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, nota: e.target.value }))}
+                    rows={2} placeholder="Observaciones internas sobre el paciente"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#5fb3b0]/50" />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 px-6 py-4 border-t border-slate-200">
+              <button type="button" onClick={handleGuardarEdicion} disabled={guardandoEdicion}
+                className="px-5 py-2 bg-[#5fb3b0] text-white rounded-lg hover:bg-[#4a9a97] text-sm font-medium disabled:opacity-60">
+                {guardandoEdicion ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+              <button type="button" onClick={() => setEditandoPaciente(null)}
+                className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 text-sm">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

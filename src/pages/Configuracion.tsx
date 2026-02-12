@@ -10,6 +10,43 @@ interface EstadoDiente {
   simbolo?: string;
 }
 
+// ── Color de borde/símbolo calculado desde el color de fondo ─────────────────
+
+function accentColor(hex: string): string {
+  if (!hex || hex.length < 7) return '#94a3b8';
+  try {
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    if (max === min) return '#94a3b8';
+    const d = max - min;
+    const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    let h = 0;
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+      case g: h = ((b - r) / d + 2) / 6; break;
+      case b: h = ((r - g) / d + 4) / 6; break;
+    }
+    const ns = Math.min(1, s + 0.4);
+    const nl = 0.45;
+    const q = nl < 0.5 ? nl * (1 + ns) : nl + ns - nl * ns;
+    const p = 2 * nl - q;
+    const hue2rgb = (p: number, q: number, t: number) => {
+      if (t < 0) t += 1; if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    };
+    const nr = Math.round(hue2rgb(p, q, h + 1/3) * 255);
+    const ng = Math.round(hue2rgb(p, q, h) * 255);
+    const nb = Math.round(hue2rgb(p, q, h - 1/3) * 255);
+    return `#${nr.toString(16).padStart(2,'0')}${ng.toString(16).padStart(2,'0')}${nb.toString(16).padStart(2,'0')}`;
+  } catch { return '#94a3b8'; }
+}
+
 // ── Símbolos disponibles ──────────────────────────────────────────────────────
 
 export const SIMBOLOS_DISPONIBLES: {
@@ -27,8 +64,8 @@ export const SIMBOLOS_DISPONIBLES: {
     label: 'X (ausente)',
     svg: (
       <svg viewBox="0 0 32 32" className="w-full h-full" strokeWidth={2.5}>
-        <line x1="4" y1="4" x2="28" y2="28" stroke="#475569" />
-        <line x1="28" y1="4" x2="4" y2="28" stroke="#475569" />
+        <line x1="4" y1="4" x2="28" y2="28" stroke="currentColor" />
+        <line x1="28" y1="4" x2="4" y2="28" stroke="currentColor" />
       </svg>
     ),
   },
@@ -37,7 +74,7 @@ export const SIMBOLOS_DISPONIBLES: {
     label: 'Arco (prótesis fija)',
     svg: (
       <svg viewBox="0 0 32 32" className="w-full h-full" strokeWidth={2.5} fill="none">
-        <path d="M 5 26 L 5 10 L 27 10 L 27 26" stroke="#475569" strokeLinejoin="round" />
+        <path d="M 5 26 L 5 10 L 27 10 L 27 26" stroke="currentColor" strokeLinejoin="round" />
       </svg>
     ),
   },
@@ -46,7 +83,7 @@ export const SIMBOLOS_DISPONIBLES: {
     label: 'Rectángulo (prótesis removible)',
     svg: (
       <svg viewBox="0 0 32 32" className="w-full h-full" strokeWidth={2.5} fill="none">
-        <rect x="5" y="5" width="22" height="22" rx="1" stroke="#475569" />
+        <rect x="5" y="5" width="22" height="22" rx="1" stroke="currentColor" />
       </svg>
     ),
   },
@@ -55,7 +92,7 @@ export const SIMBOLOS_DISPONIBLES: {
     label: 'Círculo (corona)',
     svg: (
       <svg viewBox="0 0 32 32" className="w-full h-full" strokeWidth={2.5} fill="none">
-        <circle cx="16" cy="16" r="11" stroke="#475569" />
+        <circle cx="16" cy="16" r="11" stroke="currentColor" />
       </svg>
     ),
   },
@@ -63,7 +100,7 @@ export const SIMBOLOS_DISPONIBLES: {
     id: 'PUNTO',
     label: 'Punto (caries)',
     svg: (
-      <svg viewBox="0 0 32 32" className="w-full h-full" fill="#475569">
+      <svg viewBox="0 0 32 32" className="w-full h-full" fill="currentColor">
         <circle cx="16" cy="16" r="6" />
       </svg>
     ),
@@ -81,10 +118,11 @@ function SimboloPreview({
 }) {
   const cfg = SIMBOLOS_DISPONIBLES.find((s) => s.id === simbolo);
   const dim = size === 'sm' ? 'w-6 h-6' : 'w-8 h-8';
+  const accent = accentColor(color);
   return (
     <div
-      className={`relative ${dim} rounded border-2 border-slate-300 shrink-0 overflow-hidden`}
-      style={{ backgroundColor: color }}
+      className={`relative inline-flex ${dim} rounded border-2 shrink-0 overflow-hidden`}
+      style={{ backgroundColor: color, borderColor: accent, color: accent }}
     >
       {cfg?.svg && (
         <span className="absolute inset-0 pointer-events-none">
@@ -110,11 +148,12 @@ function SimboloPicker({
           type="button"
           title={s.label}
           onClick={() => onChange(s.id)}
-          className={`relative w-8 h-8 rounded border-2 shrink-0 overflow-hidden transition-all
+          className={`relative w-8 h-8 rounded border-2 shrink-0 overflow-hidden transition-all bg-white
             ${value === s.id
               ? 'border-[#5fb3b0] ring-2 ring-[#5fb3b0]/30'
-              : 'border-slate-300 hover:border-slate-400 bg-white'
+              : 'border-slate-300 hover:border-slate-400'
             }`}
+          style={{ color: '#475569' }}
         >
           {s.svg ? (
             <span className="absolute inset-0 pointer-events-none">{s.svg}</span>
@@ -314,7 +353,7 @@ export function Configuracion() {
                 </div>
               ) : (
                 <div className="flex items-center gap-3">
-                  <SimboloPreview simbolo={e.simbolo} color={e.color} />
+                  <SimboloPreview simbolo={e.simbolo || 'NINGUNO'} color={e.color} />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-slate-800 text-sm">{e.nombre}</p>
                     <p className="text-xs text-slate-400">
