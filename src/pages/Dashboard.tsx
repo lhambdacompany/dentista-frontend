@@ -259,7 +259,7 @@ export function Dashboard() {
                     >
                       {c.estado}
                     </span>
-                    <CitaRecordatorioButton citaId={c.id} />
+                    {/* <CitaRecordatorioButton citaId={c.id} /> */}
                     <CitaWhatsAppButton paciente={c.paciente} />
                   </div>
                 </li>
