@@ -17,7 +17,7 @@ export function PacienteNotas() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ titulo: '', descripcion: '', profesional: 'Admin' });
+  const [form, setForm] = useState({ titulo: '', descripcion: '', profesional: 'Micaela Ancarola' });
 
   const load = () => {
     if (!id) return;
@@ -38,7 +38,7 @@ export function PacienteNotas() {
     if (!id || !form.titulo.trim() || !form.descripcion.trim()) return;
     try {
       await api.notas.create({ ...form, pacienteId: id });
-      setForm({ titulo: '', descripcion: '', profesional: 'Admin' });
+      setForm({ titulo: '', descripcion: '', profesional: 'Micaela Ancarola' });
       setShowForm(false);
       load();
     } catch (err) {

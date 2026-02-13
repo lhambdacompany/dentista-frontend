@@ -3,38 +3,24 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatearFecha } from '../lib/formatDate';
 
-function RecordatorioBtn({ citaId }: { citaId: string }) {
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState('');
-  const handleClick = async () => {
-    setLoading(true);
-    setMsg('');
-    try {
-      const res = await api.citas.enviarRecordatorio(citaId) as { enviado: boolean; mensaje: string };
-      setMsg(res.enviado ? '✓ Enviado' : res.mensaje);
-      if (!res.enviado) setTimeout(() => setMsg(''), 4000);
-    } catch {
-      setMsg('Error');
-      setTimeout(() => setMsg(''), 3000);
-    } finally {
-      setLoading(false);
-    }
-  };
+
+function WhatsAppBtn({ telefono, nombre }: { telefono?: string; nombre: string }) {
+  if (!telefono) return null;
+  const tel = telefono.replace(/\D/g, '');
+  if (!tel) return null;
+  const msg = encodeURIComponent(`Hola ${nombre}, te recordamos que tenés un turno programado. ¡Te esperamos!`);
   return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={loading}
-        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-white/20 backdrop-blur border border-white/30 rounded-xl hover:bg-white/30 transition-all disabled:opacity-50"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-        </svg>
-        {loading ? 'Enviando...' : 'Enviar recordatorio'}
-      </button>
-      {msg && <span className="text-sm text-slate-600">{msg}</span>}
-    </div>
+    <a
+      href={`https://wa.me/${tel}?text=${msg}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-500/80 backdrop-blur border border-green-400/50 rounded-xl hover:bg-green-500 transition-all"
+    >
+      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+      </svg>
+      WhatsApp
+    </a>
   );
 }
 
@@ -73,12 +59,21 @@ interface Cita {
   horaFin: string;
   motivo?: string;
   estado: string;
-  paciente: { id: string; nombre: string; apellido: string; email?: string };
+  paciente: { id: string; nombre: string; apellido: string; email?: string; telefono?: string };
   odontogramas: Odontograma[];
   notasClinicas: Nota[];
   imagenes: Imagen[];
   registroPrestacion?: RegistroPrestacion | null;
 }
+
+const ESTADOS_CITA = ['PENDIENTE', 'CONFIRMADA', 'FINALIZADA', 'CANCELADO'] as const;
+
+const ESTADO_BADGE: Record<string, string> = {
+  PENDIENTE:  'bg-yellow-400/20 border-yellow-300/50 text-yellow-100',
+  CONFIRMADA: 'bg-blue-400/20 border-blue-300/50 text-blue-100',
+  FINALIZADA: 'bg-green-400/20 border-green-300/50 text-green-100',
+  CANCELADO:  'bg-red-400/20 border-red-300/50 text-red-100',
+};
 
 export function CitaDetalle() {
   const { id } = useParams<{ id: string }>();
@@ -86,8 +81,14 @@ export function CitaDetalle() {
   const [nuevoOdonto, setNuevoOdonto] = useState(false);
   const [nuevaNota, setNuevaNota] = useState(false);
   const [tituloOdonto, setTituloOdonto] = useState('');
-  const [formNota, setFormNota] = useState({ titulo: '', descripcion: '', profesional: 'Admin' });
+  const [formNota, setFormNota] = useState({ titulo: '', descripcion: '', profesional: 'Micaela Ancarola' });
   const [lightboxImg, setLightboxImg] = useState<Imagen | null>(null);
+  const [editandoCita, setEditandoCita] = useState(false);
+  const [editEstado, setEditEstado] = useState('');
+  const [editFecha, setEditFecha] = useState('');
+  const [editHoraInicio, setEditHoraInicio] = useState('');
+  const [editHoraFin, setEditHoraFin] = useState('');
+  const [guardandoCita, setGuardandoCita] = useState(false);
 
   const load = () => {
     if (!id) return;
@@ -115,11 +116,39 @@ export function CitaDetalle() {
     if (!cita || !formNota.titulo.trim() || !formNota.descripcion.trim()) return;
     try {
       await api.notas.create({ ...formNota, pacienteId: cita.paciente.id, citaId: id! });
-      setFormNota({ titulo: '', descripcion: '', profesional: 'Admin' });
+      setFormNota({ titulo: '', descripcion: '', profesional: 'Micaela Ancarola' });
       setNuevaNota(false);
       load();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error');
+    }
+  };
+
+  const iniciarEdicionCita = () => {
+    if (!cita) return;
+    setEditEstado(cita.estado);
+    setEditFecha(cita.fecha.slice(0, 10));
+    setEditHoraInicio(cita.horaInicio);
+    setEditHoraFin(cita.horaFin);
+    setEditandoCita(true);
+  };
+
+  const handleActualizarCita = async () => {
+    if (!id) return;
+    setGuardandoCita(true);
+    try {
+      await api.citas.update(id, {
+        estado: editEstado,
+        fecha: editFecha,
+        horaInicio: editHoraInicio,
+        horaFin: editHoraFin,
+      });
+      setEditandoCita(false);
+      load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al actualizar');
+    } finally {
+      setGuardandoCita(false);
     }
   };
 
@@ -174,13 +203,92 @@ export function CitaDetalle() {
               <p className="mt-2 text-white/85 text-sm">{cita.motivo}</p>
             )}
           </div>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <span className="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-medium bg-white/20 backdrop-blur border border-white/30">
-              {cita.estado}
-            </span>
-            <RecordatorioBtn citaId={id!} />
+          <div className="flex flex-col items-start gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-medium border ${ESTADO_BADGE[cita.estado] ?? 'bg-white/20 border-white/30 text-white'}`}>
+                {cita.estado}
+              </span>
+              <button
+                type="button"
+                onClick={iniciarEdicionCita}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-white/20 backdrop-blur border border-white/30 rounded-xl hover:bg-white/30 transition-all"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z" />
+                </svg>
+                Editar
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <WhatsAppBtn telefono={cita.paciente.telefono} nombre={`${cita.paciente.nombre} ${cita.paciente.apellido}`} />
+            </div>
           </div>
         </div>
+
+        {/* Formulario edición inline */}
+        {editandoCita && (
+          <div className="mt-6 pt-6 border-t border-white/20">
+            <p className="text-white/80 text-xs font-bold uppercase tracking-wider mb-4">Editar cita</p>
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="space-y-1">
+                <label className="text-xs text-white/70">Estado</label>
+                <select
+                  value={editEstado}
+                  onChange={(e) => setEditEstado(e.target.value)}
+                  className="px-3 py-2 rounded-lg bg-white/20 border border-white/30 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/40"
+                >
+                  {ESTADOS_CITA.map((est) => (
+                    <option key={est} value={est} className="text-slate-800 bg-white">{est}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-white/70">Fecha</label>
+                <input
+                  type="date"
+                  value={editFecha}
+                  onChange={(e) => setEditFecha(e.target.value)}
+                  className="px-3 py-2 rounded-lg bg-white/20 border border-white/30 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/40 [color-scheme:dark]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-white/70">Hora inicio</label>
+                <input
+                  type="time"
+                  value={editHoraInicio}
+                  onChange={(e) => setEditHoraInicio(e.target.value)}
+                  className="px-3 py-2 rounded-lg bg-white/20 border border-white/30 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/40 [color-scheme:dark]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-white/70">Hora fin</label>
+                <input
+                  type="time"
+                  value={editHoraFin}
+                  onChange={(e) => setEditHoraFin(e.target.value)}
+                  className="px-3 py-2 rounded-lg bg-white/20 border border-white/30 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white/40 [color-scheme:dark]"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleActualizarCita}
+                  disabled={guardandoCita}
+                  className="px-4 py-2 bg-white text-[#4a9a97] rounded-lg text-sm font-semibold hover:bg-white/90 transition-colors disabled:opacity-60"
+                >
+                  {guardandoCita ? 'Guardando...' : 'Guardar'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditandoCita(false)}
+                  className="px-4 py-2 bg-white/20 border border-white/30 text-white rounded-lg text-sm hover:bg-white/30 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Acciones rápidas - Registro y Historia Clínica */}

@@ -586,7 +586,9 @@ export function RegistroPrestaciones() {
             </div>
             <div className="flex items-baseline gap-2">
               <span className="font-bold text-slate-700 whitespace-nowrap">CÓDIGO Nº:</span>
-              <span className="text-slate-400 border-b border-dotted border-slate-300 flex-1">—</span>
+              <span className="text-slate-600 border-b border-dotted border-slate-400 flex-1">
+                {cita.paciente.dni ?? '—'}
+              </span>
             </div>
           </div>
           <div className="border-2 border-[#5fb3b0] p-3 text-sm text-center flex flex-col justify-center shrink-0">
