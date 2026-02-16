@@ -100,7 +100,9 @@ export function PacienteImagenes() {
                   alt={img.descripcion || 'Imagen'}
                   className="w-full h-32 sm:h-36 object-cover cursor-zoom-in hover:opacity-90 transition"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Imagen';
+                    const target = e.target as HTMLImageElement;
+                    target.onerror = null;
+                    target.style.display = 'none';
                   }}
                 />
               </button>
