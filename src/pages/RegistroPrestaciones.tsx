@@ -586,7 +586,9 @@ export function RegistroPrestaciones() {
             </div>
             <div className="flex items-baseline gap-2">
               <span className="font-bold text-slate-700 whitespace-nowrap">CÓDIGO Nº:</span>
-              <span className="text-slate-400 border-b border-dotted border-slate-300 flex-1">—</span>
+              <span className="text-slate-600 border-b border-dotted border-slate-400 flex-1">
+                {cita.paciente.dni ?? '—'}
+              </span>
             </div>
           </div>
           <div className="border-2 border-[#5fb3b0] p-3 text-sm text-center flex flex-col justify-center shrink-0">
@@ -638,7 +640,7 @@ export function RegistroPrestaciones() {
             </div>
           ) : (
             <>
-              {/* ── TABLA DE PRESTACIONES ── */}
+              {/* ── TABLA / LISTA DE PRESTACIONES ── */}
               <section className="border border-slate-200 rounded-lg overflow-hidden">
                 <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
                   <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Prestaciones realizadas</p>
@@ -648,7 +650,119 @@ export function RegistroPrestaciones() {
                     </button>
                   )}
                 </div>
-                <div className="overflow-x-auto">
+
+                {/* Formulario agregar/editar – mobile (apilado) */}
+                {(nuevoItem || editandoId) && (
+                  <div className="md:hidden p-4 bg-[#5fb3b0]/5 border-b border-[#5fb3b0]/20 space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Diente Nº</label>
+                        <input type="number" min={11} max={85} value={formItem.numeroDiente}
+                          onChange={(e) => setFormItem((f) => ({ ...f, numeroDiente: parseInt(e.target.value, 10) || 11 }))}
+                          className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center" autoFocus />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Cara</label>
+                        <select value={formItem.cara} onChange={(e) => setFormItem((f) => ({ ...f, cara: e.target.value }))}
+                          className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
+                          <option value="">—</option>
+                          {CARAS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Código *</label>
+                        <input type="text" value={formItem.codigo}
+                          onChange={(e) => setFormItem((f) => ({ ...f, codigo: e.target.value }))}
+                          className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Cantidad</label>
+                        <input type="number" min={1} value={formItem.cantidad}
+                          onChange={(e) => setFormItem((f) => ({ ...f, cantidad: parseInt(e.target.value, 10) || 1 }))}
+                          className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Descripción</label>
+                      <input type="text" value={formItem.descripcion}
+                        onChange={(e) => setFormItem((f) => ({ ...f, descripcion: e.target.value }))}
+                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        <label className="block text-xs text-slate-500 mb-1">Fecha realización</label>
+                        <input type="date" value={formItem.fechaRealizacion}
+                          onChange={(e) => setFormItem((f) => ({ ...f, fechaRealizacion: e.target.value }))}
+                          className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
+                      </div>
+                      <div className="flex items-center gap-2 pt-4">
+                        <input type="checkbox" checked={formItem.conformidadPaciente}
+                          onChange={(e) => setFormItem((f) => ({ ...f, conformidadPaciente: e.target.checked }))}
+                          className="accent-[#5fb3b0] w-4 h-4" id="conformidad-mobile" />
+                        <label htmlFor="conformidad-mobile" className="text-xs text-slate-600">Conformidad</label>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      {editandoId ? (
+                        <>
+                          <button type="button" onClick={() => handleActualizarItem(editandoId, formItem)}
+                            className="px-4 py-2 bg-[#5fb3b0] text-white rounded text-sm font-medium">Guardar</button>
+                          <button type="button" onClick={() => setEditandoId(null)}
+                            className="px-4 py-2 bg-slate-200 text-slate-600 rounded text-sm">Cancelar</button>
+                        </>
+                      ) : (
+                        <>
+                          <button type="button" onClick={handleAgregarItem}
+                            className="px-4 py-2 bg-[#5fb3b0] text-white rounded text-sm font-medium">Agregar</button>
+                          <button type="button" onClick={() => setNuevoItem(false)}
+                            className="px-4 py-2 bg-slate-200 text-slate-600 rounded text-sm">Cancelar</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* MOBILE: tarjetas de items */}
+                <div className="md:hidden divide-y divide-slate-100">
+                  {registro.items.length === 0 && !nuevoItem && (
+                    <p className="px-4 py-6 text-center text-slate-400 text-xs italic">
+                      Sin prestaciones registradas. Tocá "+ Agregar prestación" o un diente del odontograma.
+                    </p>
+                  )}
+                  {registro.items.map((item) => (
+                    <div key={item.id} className={`p-3 space-y-1 ${editandoId === item.id ? 'bg-[#5fb3b0]/5' : ''}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-slate-800 text-sm">D{item.numeroDiente}</span>
+                          <span className="font-mono text-[#5fb3b0] text-sm font-semibold">{item.codigo}</span>
+                          {item.cara && <span className="text-xs text-slate-400">{CARAS.find((c) => c.value === item.cara)?.label}</span>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {item.conformidadPaciente && <span className="text-green-600 text-xs font-bold">✓</span>}
+                          <span className="text-xs text-slate-500">×{item.cantidad}</span>
+                        </div>
+                      </div>
+                      {item.descripcion && <p className="text-xs text-slate-500">{item.descripcion}</p>}
+                      {item.fechaRealizacion && <p className="text-xs text-slate-400">{formatearFecha(item.fechaRealizacion)}</p>}
+                      <div className="flex gap-3 pt-1">
+                        <button type="button" onClick={() => {
+                          setEditandoId(item.id);
+                          setNuevoItem(false);
+                          setFormItem({
+                            numeroDiente: item.numeroDiente, cara: item.cara ?? '',
+                            codigo: item.codigo, descripcion: item.descripcion ?? '',
+                            fechaRealizacion: item.fechaRealizacion ? item.fechaRealizacion.slice(0, 10) : '',
+                            cantidad: item.cantidad, conformidadPaciente: item.conformidadPaciente,
+                          });
+                        }} className="text-xs text-[#5fb3b0] hover:underline">Editar</button>
+                        <button type="button" onClick={() => handleEliminarItem(item.id)} className="text-xs text-red-500 hover:underline">Eliminar</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* DESKTOP: tabla */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200">

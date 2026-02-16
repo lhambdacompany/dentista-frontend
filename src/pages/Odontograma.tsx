@@ -13,33 +13,70 @@ interface EstadoConfig {
   simbolo?: string;
 }
 
-// ── SVGs por símbolo ──────────────────────────────────────────────────────────
+// ── Color del borde/símbolo calculado desde el color de fondo ────────────────
+
+function accentColor(hex: string): string {
+  if (!hex || hex.length < 7) return '#94a3b8';
+  try {
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    if (max === min) return '#94a3b8';
+    const d = max - min;
+    const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    let h = 0;
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+      case g: h = ((b - r) / d + 2) / 6; break;
+      case b: h = ((r - g) / d + 4) / 6; break;
+    }
+    const ns = Math.min(1, s + 0.4);
+    const nl = 0.45;
+    const q = nl < 0.5 ? nl * (1 + ns) : nl + ns - nl * ns;
+    const p = 2 * nl - q;
+    const hue2rgb = (p: number, q: number, t: number) => {
+      if (t < 0) t += 1; if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    };
+    const nr = Math.round(hue2rgb(p, q, h + 1/3) * 255);
+    const ng = Math.round(hue2rgb(p, q, h) * 255);
+    const nb = Math.round(hue2rgb(p, q, h - 1/3) * 255);
+    return `#${nr.toString(16).padStart(2,'0')}${ng.toString(16).padStart(2,'0')}${nb.toString(16).padStart(2,'0')}`;
+  } catch { return '#94a3b8'; }
+}
+
+// ── SVGs por símbolo (usan currentColor para heredar el accentColor) ──────────
 
 const SIMBOLO_SVG: Record<string, React.ReactNode> = {
   X: (
     <svg viewBox="0 0 32 32" className="absolute inset-0 w-full h-full pointer-events-none" strokeWidth={2.5}>
-      <line x1="4" y1="4" x2="28" y2="28" stroke="#475569" />
-      <line x1="28" y1="4" x2="4" y2="28" stroke="#475569" />
+      <line x1="4" y1="4" x2="28" y2="28" stroke="currentColor" />
+      <line x1="28" y1="4" x2="4" y2="28" stroke="currentColor" />
     </svg>
   ),
   ARCO: (
     <svg viewBox="0 0 32 32" className="absolute inset-0 w-full h-full pointer-events-none" strokeWidth={2.5} fill="none">
-      <path d="M 5 26 L 5 10 L 27 10 L 27 26" stroke="#475569" strokeLinejoin="round" />
+      <path d="M 5 26 L 5 10 L 27 10 L 27 26" stroke="currentColor" strokeLinejoin="round" />
     </svg>
   ),
   RECTANGULO: (
     <svg viewBox="0 0 32 32" className="absolute inset-0 w-full h-full pointer-events-none" strokeWidth={2.5} fill="none">
-      <rect x="5" y="5" width="22" height="22" rx="1" stroke="#475569" />
+      <rect x="5" y="5" width="22" height="22" rx="1" stroke="currentColor" />
     </svg>
   ),
   CIRCULO: (
     <svg viewBox="0 0 32 32" className="absolute inset-0 w-full h-full pointer-events-none" strokeWidth={2.5} fill="none">
-      <circle cx="16" cy="16" r="11" stroke="#475569" />
+      <circle cx="16" cy="16" r="11" stroke="currentColor" />
     </svg>
   ),
   PUNTO: (
-    <svg viewBox="0 0 32 32" className="absolute inset-0 w-full h-full pointer-events-none" fill="#475569">
-      <circle cx="16" cy="16" r="6" />
+    <svg viewBox="0 0 32 32" className="absolute inset-0 w-full h-full pointer-events-none">
+      <circle cx="16" cy="16" r="6" fill="currentColor" />
     </svg>
   ),
 };
@@ -127,6 +164,7 @@ function DienteBtn({
 }) {
   const cfg = estados.find((e) => e.clave === estadoClave);
   const color = cfg?.color ?? '#e2e8f0';
+  const accent = accentColor(color);
   const simboloSvg = cfg?.simbolo ? SIMBOLO_SVG[cfg.simbolo] : null;
 
   return (
@@ -136,15 +174,14 @@ function DienteBtn({
         onClick={onClick}
         title={`Diente ${num}${cfg ? ` — ${cfg.nombre}` : ''}${herramientaActiva ? '' : ' (seleccioná una herramienta)'}`}
         className={`relative w-9 h-9 border-2 rounded flex flex-col items-center justify-end pb-0.5 overflow-hidden transition-all
-          ${herramientaActiva ? 'cursor-pointer hover:opacity-80 hover:scale-105' : 'cursor-default'}
-          border-slate-300`}
-        style={{ backgroundColor: color }}
+          ${herramientaActiva ? 'cursor-pointer hover:opacity-80 hover:scale-105' : 'cursor-default'}`}
+        style={{ backgroundColor: color, borderColor: accent, color: accent }}
       >
         {simboloSvg}
         {tieneNota && (
           <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-[#5fb3b0] z-10" />
         )}
-        <span className="text-[9px] font-bold z-10 leading-none select-none text-slate-700">
+        <span className="text-[9px] font-bold z-10 leading-none select-none" style={{ color: accent }}>
           {num}
         </span>
       </button>
@@ -404,8 +441,8 @@ export function Odontograma() {
                       }`}
                   >
                     <span
-                      className="relative w-4 h-4 rounded-sm border border-slate-300 shrink-0 overflow-hidden"
-                      style={{ backgroundColor: e.color }}
+                      className="relative inline-block w-4 h-4 rounded-sm border shrink-0 overflow-hidden"
+                      style={{ backgroundColor: e.color, borderColor: accentColor(e.color), color: accentColor(e.color) }}
                     >
                       {e.simbolo && SIMBOLO_SVG[e.simbolo]}
                     </span>
@@ -529,8 +566,8 @@ export function Odontograma() {
               {estados.map((e) => (
                 <div key={e.id} className="flex items-center gap-2">
                   <span
-                    className="relative w-5 h-5 rounded-sm border border-slate-300 shrink-0 overflow-hidden"
-                    style={{ backgroundColor: e.color }}
+                    className="relative inline-flex w-5 h-5 rounded-sm border-2 shrink-0 overflow-hidden"
+                    style={{ backgroundColor: e.color, borderColor: accentColor(e.color), color: accentColor(e.color) }}
                   >
                     {e.simbolo && SIMBOLO_SVG[e.simbolo]}
                   </span>
