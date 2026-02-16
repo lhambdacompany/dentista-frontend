@@ -1,5 +1,15 @@
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
+/** Convierte una ruta relativa de upload a URL absoluta del backend */
+export function getUploadUrl(url: string): string {
+  if (!url) return '';
+  // Si ya es una URL absoluta, devolver tal cual
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  // Derivar base del backend quitando /api del API_BASE
+  const backendBase = API_BASE.replace(/\/api\/?$/, '');
+  return `${backendBase}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
 async function parseJson<T>(res: Response): Promise<T> {
   const text = await res.text();
   if (!text.trim()) return {} as T;

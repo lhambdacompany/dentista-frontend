@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api } from '../lib/api';
+import { api, getUploadUrl } from '../lib/api';
 import { formatearFecha } from '../lib/formatDate';
 
 function RecordatorioBtn({ citaId }: { citaId: string }) {
@@ -404,7 +404,7 @@ export function CitaDetalle() {
                   >
                     <div className="aspect-square overflow-hidden bg-slate-100">
                       <img
-                        src={img.url}
+                        src={getUploadUrl(img.url)}
                         alt={img.descripcion || 'Imagen'}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
@@ -431,7 +431,7 @@ export function CitaDetalle() {
           <button onClick={() => setLightboxImg(null)} className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white text-2xl transition-colors">
             ×
           </button>
-          <img src={lightboxImg.url} alt="" className="max-w-full max-h-[90vh] object-contain rounded-lg" onClick={(e) => e.stopPropagation()} />
+          <img src={getUploadUrl(lightboxImg.url)} alt="" className="max-w-full max-h-[90vh] object-contain rounded-lg" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </div>
