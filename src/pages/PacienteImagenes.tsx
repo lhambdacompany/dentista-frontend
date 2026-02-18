@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api } from '../lib/api';
+import { api, getUploadUrl } from '../lib/api';
 import { formatearFecha } from '../lib/formatDate';
 
 interface Imagen {
@@ -96,11 +96,13 @@ export function PacienteImagenes() {
                 className="w-full block text-left focus:outline-none focus:ring-2 focus:ring-[#5fb3b0] rounded-t-xl overflow-hidden"
               >
                 <img
-                  src={img.url}
+                  src={getUploadUrl(img.url)}
                   alt={img.descripcion || 'Imagen'}
                   className="w-full h-32 sm:h-36 object-cover cursor-zoom-in hover:opacity-90 transition"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Imagen';
+                    const target = e.target as HTMLImageElement;
+                    target.onerror = null;
+                    target.style.display = 'none';
                   }}
                 />
               </button>
@@ -145,7 +147,7 @@ export function PacienteImagenes() {
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={lightboxImg.url}
+              src={getUploadUrl(lightboxImg.url)}
               alt={lightboxImg.descripcion || 'Imagen ampliada'}
               className="max-w-full max-h-[85vh] object-contain rounded-lg"
             />
