@@ -43,6 +43,14 @@ interface ObraSocial {
 }
 
 const ODONTOGRAMAS_POR_PAGINA = 5;
+const CITAS_POR_PAGINA = 5;
+
+const ESTADO_CITA_BADGE: Record<string, string> = {
+  PENDIENTE:  'bg-yellow-100 text-yellow-700',
+  CONFIRMADA: 'bg-blue-100 text-blue-700',
+  FINALIZADA: 'bg-green-100 text-green-700',
+  CANCELADA:  'bg-red-100 text-red-700',
+};
 
 export function PacienteDetalle() {
   const { id } = useParams<{ id: string }>();
@@ -51,6 +59,8 @@ export function PacienteDetalle() {
   const [paginaOdonto, setPaginaOdonto] = useState(1);
   const [totalOdonto, setTotalOdonto] = useState(0);
   const [proximaCita, setProximaCita] = useState<Cita | null>(null);
+  const [todasLasCitas, setTodasLasCitas] = useState<Cita[]>([]);
+  const [paginaCitas, setPaginaCitas] = useState(1);
   const [nuevoOdontograma, setNuevoOdontograma] = useState(false);
   const [tituloOdontograma, setTituloOdontograma] = useState('');
   const [numerosDientesInput, setNumerosDientesInput] = useState('');
@@ -132,6 +142,13 @@ export function PacienteDetalle() {
       const prox = arr.find((c) => new Date(c.fecha) >= new Date());
       setProximaCita(prox || null);
     });
+    // Cargar todas las citas del paciente (sin filtro de fecha)
+    api.citas.list(undefined, undefined, id).then((citas) => {
+      const arr = (citas as Cita[]).sort(
+        (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+      );
+      setTodasLasCitas(arr);
+    });
   }, [id]);
 
   const handleCrearOdontograma = async () => {
@@ -158,6 +175,12 @@ export function PacienteDetalle() {
       alert(err instanceof Error ? err.message : 'Error');
     }
   };
+
+  const totalPaginasCitas = Math.ceil(todasLasCitas.length / CITAS_POR_PAGINA);
+  const citasPaginadas = todasLasCitas.slice(
+    (paginaCitas - 1) * CITAS_POR_PAGINA,
+    paginaCitas * CITAS_POR_PAGINA
+  );
 
   const totalPaginas = Math.ceil(totalOdonto / ODONTOGRAMAS_POR_PAGINA);
   const odontogramasPaginados = odontogramas.slice(
@@ -313,6 +336,70 @@ export function PacienteDetalle() {
             })()}
           </div>
         )}
+
+        {/* ── CITAS ── */}
+        <div className="mt-6">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <h2 className="text-lg font-semibold text-slate-800">Citas</h2>
+            <Link
+              to="/calendario"
+              className="text-sm text-[#5fb3b0] hover:underline shrink-0"
+            >
+              + Nueva cita
+            </Link>
+          </div>
+
+          {todasLasCitas.length === 0 ? (
+            <p className="text-slate-500 text-sm py-2">No hay citas registradas para este paciente.</p>
+          ) : (
+            <div className="space-y-2">
+              {citasPaginadas.map((c) => (
+                <Link
+                  key={c.id}
+                  to={`/citas/${c.id}`}
+                  className="flex items-center justify-between gap-3 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition group"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-800 text-sm">
+                      {formatearFecha(c.fecha)} · {c.horaInicio}–{c.horaFin}
+                    </p>
+                    {c.motivo && (
+                      <p className="text-xs text-slate-500 truncate">{c.motivo}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTADO_CITA_BADGE[c.estado] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {c.estado}
+                    </span>
+                    <svg className="w-4 h-4 text-slate-400 group-hover:text-[#5fb3b0] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </Link>
+              ))}
+
+              {totalPaginasCitas > 1 && (
+                <div className="flex justify-center gap-2 mt-3">
+                  <button
+                    onClick={() => setPaginaCitas((p) => Math.max(1, p - 1))}
+                    disabled={paginaCitas <= 1}
+                    className="px-3 py-1 rounded bg-slate-200 disabled:opacity-50 text-sm"
+                  >
+                    Anterior
+                  </button>
+                  <span className="px-3 py-1 text-sm text-slate-600">{paginaCitas} / {totalPaginasCitas}</span>
+                  <button
+                    onClick={() => setPaginaCitas((p) => Math.min(totalPaginasCitas, p + 1))}
+                    disabled={paginaCitas >= totalPaginasCitas}
+                    className="px-3 py-1 rounded bg-slate-200 disabled:opacity-50 text-sm"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Botones Notas, Imágenes, Historial - arriba del odontograma */}
         <div className="mt-6 flex flex-wrap gap-2">

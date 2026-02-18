@@ -12,7 +12,7 @@ export function Layout() {
     { to: '/pacientes', label: 'Pacientes' },
     { to: '/obras-sociales', label: 'Obras sociales' },
     { to: '/calendario', label: 'Calendario' },
-    { to: '/prestaciones', label: 'Registro de prestaciones' },
+    { to: '/prestaciones', label: 'Prestaciones' },
     { to: '/configuracion', label: 'Configuración' },
   ];
 
@@ -22,16 +22,16 @@ export function Layout() {
   return (
     <div className="min-h-screen bg-slate-100">
       <header className="bg-[#5fb3b0] text-white shadow-md">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <Link to="/" className="text-xl font-semibold">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+          <Link to="/" className="text-lg font-semibold shrink-0">
             Dentista
           </Link>
 
-          {/* Botón hamburguesa - solo visible en móvil */}
+          {/* Hamburguesa — visible hasta lg (1024px) */}
           <button
             type="button"
             onClick={() => setMenuOpen((o) => !o)}
-            className="md:hidden p-2 rounded hover:bg-white/10"
+            className="lg:hidden p-2 rounded hover:bg-white/10"
             aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
             aria-expanded={menuOpen}
           >
@@ -44,14 +44,14 @@ export function Layout() {
             </svg>
           </button>
 
-          {/* Nav desktop - oculto en móvil */}
-          <div className="hidden md:flex items-center gap-4">
-            <nav className="flex gap-4">
+          {/* Nav desktop — visible desde lg (1024px) */}
+          <div className="hidden lg:flex items-center gap-2 xl:gap-4">
+            <nav className="flex gap-1 xl:gap-2">
               {nav.map(({ to, label }) => (
                 <Link
                   key={to}
                   to={to}
-                  className={`px-3 py-1 rounded transition ${
+                  className={`px-2 xl:px-3 py-1.5 rounded text-sm font-medium transition whitespace-nowrap ${
                     isActive(to) ? 'bg-white/20' : 'hover:bg-white/10'
                   }`}
                 >
@@ -59,11 +59,11 @@ export function Layout() {
                 </Link>
               ))}
             </nav>
-            <div className="flex items-center gap-4 border-l border-white/30 pl-4">
-              <span className="text-sm">{user?.nombre}</span>
+            <div className="flex items-center gap-2 xl:gap-3 border-l border-white/30 pl-3 xl:pl-4">
+              <span className="text-sm truncate max-w-[120px]">{user?.nombre}</span>
               <button
                 onClick={logout}
-                className="px-3 py-1 rounded bg-white/20 hover:bg-white/30 text-sm"
+                className="px-3 py-1.5 rounded bg-white/20 hover:bg-white/30 text-sm whitespace-nowrap"
               >
                 Salir
               </button>
@@ -71,10 +71,10 @@ export function Layout() {
           </div>
         </div>
 
-        {/* Menú móvil desplegable */}
+        {/* Menú desplegable — mobile y tablet */}
         {menuOpen && (
-          <div className="md:hidden border-t border-white/20 px-4 py-4">
-            <nav className="flex flex-col gap-2">
+          <div className="lg:hidden border-t border-white/20 px-4 py-4">
+            <nav className="flex flex-col gap-1">
               {nav.map(({ to, label }) => (
                 <Link
                   key={to}
